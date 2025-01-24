@@ -1,135 +1,105 @@
-import { PricingFormData } from '../types';
-import { referralFees, weightHandlingFees, closingFees, otherFees } from '../data/fees';
+// feeCalculator.ts
 
-export const calculateReferralFee = (category: string, price: number): number => {
-  let feeStructure;
-  
-  if (category.startsWith('Automotive')) {
-    if (category.includes('Helmets')) {
-      feeStructure = referralFees.automotive.helmetsAndGloves;
-    } else if (category.includes('Tyres')) {
-      feeStructure = referralFees.automotive.tyresAndRims;
-    } else if (category.includes('Vehicles')) {
-      return price * (referralFees.automotive.vehicles.percentage / 100);
+import { useState } from "react";
+
+interface CalculatorInput {
+  productCategory: string;
+  sellingPrice: number;
+  weight: number;
+  shippingMode: "FBA" | "Easy Ship" | "Self Ship" | "Seller Flex";
+  serviceLevel: "Standard" | "Express";
+  productSize: "Standard" | "Non-Standard";
+  location: "Local" | "Regional" | "National" | "Special";
+  volume?: number;
+  shippingSpeed?: string;
+}
+
+interface CalculatorResponse {
+  breakdown: {
+    referralFee: number;
+    weightHandlingFee: number;
+    closingFee: number;
+    pickAndPackFee: number;
+    storageFee: number;
+    removalFee: number;
+  };
+  totalFees: number;
+  netEarnings: number;
+}
+
+export const calculateFees = async (
+  input: CalculatorInput
+): Promise<CalculatorResponse> => {
+  try {
+    const response = await fetch(
+      "http://localhost:3000/api/v1/profitability-calculator",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(input),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to calculate fees");
     }
-  } else if (category.startsWith('Baby')) {
-    feeStructure = referralFees.baby.hardlines;
-  } else if (category === 'Books') {
-    feeStructure = referralFees.books;
+
+    const data = await response.json();
+    return {
+      breakdown: {
+        referralFee: Number(data.breakdown.referralFee),
+        weightHandlingFee: Number(data.breakdown.weightHandlingFee),
+        closingFee: Number(data.breakdown.closingFee),
+        pickAndPackFee: Number(data.breakdown.pickAndPackFee),
+        storageFee: Number(data.breakdown.storageFee || 0),
+        removalFee: Number(data.breakdown.removalFee || 0),
+      },
+      totalFees: Number(data.totalFees),
+      netEarnings: Number(data.netEarnings),
+    };
+  } catch (error) {
+    console.error("Error calculating fees:", error);
+    throw error;
   }
-
-  if (!feeStructure) return price * 0.15; // Default rate
-
-  for (const tier of feeStructure) {
-    if (('maxPrice' in tier && price <= tier.maxPrice) || 
-        ('minPrice' in tier && price > tier.minPrice)) {
-      return price * (tier.percentage / 100);
-    }
-  }
-
-  return price * 0.15; // Default fallback
 };
 
-export const calculateWeightHandlingFee = (
-  mode: string,
-  weight: number,
-  serviceLevel: string,
-  location: string,
-  size: string
-): number => {
-  if (mode === 'Easy Ship') {
-    const fees = weightHandlingFees.easyShip;
-    const sizeFees = size === 'Standard' ? fees.standard : fees.heavyBulky;
+// Optional: Add loading state handling
+export const useFeeCalculator = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    if (size === 'Standard') {
-      if (weight <= 0.5) {
-        return sizeFees.first500g[location.toLowerCase()];
-      } else if (weight <= 1) {
-        return sizeFees.first500g[location.toLowerCase()] + 
-               sizeFees.additional500gUpTo1kg[location.toLowerCase()];
-      } else if (weight <= 5) {
-        return sizeFees.first500g[location.toLowerCase()] +
-               sizeFees.additional500gUpTo1kg[location.toLowerCase()] +
-               (Math.ceil(weight - 1) * sizeFees.additionalKgAfter1kg[location.toLowerCase()]);
-      } else {
-        return sizeFees.first500g[location.toLowerCase()] +
-               sizeFees.additional500gUpTo1kg[location.toLowerCase()] +
-               (4 * sizeFees.additionalKgAfter1kg[location.toLowerCase()]) +
-               (Math.ceil(weight - 5) * sizeFees.additionalKgAfter5kg[location.toLowerCase()]);
-      }
-    } else {
-      if (weight <= 12) {
-        return sizeFees.first12kg[location.toLowerCase()];
-      } else {
-        return sizeFees.first12kg[location.toLowerCase()] +
-               (Math.ceil(weight - 12) * sizeFees.additionalKgAfter12kg[location.toLowerCase()]);
-      }
+  const calculateFeesWithState = async (
+    input: CalculatorInput
+  ): Promise<CalculatorResponse | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await calculateFees(input);
+      setLoading(false);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      setLoading(false);
+      return null;
     }
-  }
-
-  if (mode === 'FBA') {
-    const fees = weightHandlingFees.fba.standard[serviceLevel.toLowerCase()];
-    if (weight <= 0.5) return fees.first500g;
-    if (weight <= 1) return fees.first500g + fees.additional500gUpTo1kg;
-    if (weight <= 5) {
-      return fees.first500g + fees.additional500gUpTo1kg +
-             (Math.ceil(weight - 1) * fees.additionalKgAfter1kg);
-    }
-    return fees.first500g + fees.additional500gUpTo1kg +
-           (4 * fees.additionalKgAfter1kg) +
-           (Math.ceil(weight - 5) * fees.additionalKgAfter5kg);
-  }
-
-  return 0;
-};
-
-export const calculateClosingFee = (mode: string, price: number): number => {
-  const getFeeRange = (price: number) => {
-    if (price <= 250) return 'upTo250';
-    if (price <= 500) return 'upTo500';
-    if (price <= 1000) return 'upTo1000';
-    return 'above1000';
   };
 
-  const range = getFeeRange(price);
-
-  if (mode === 'FBA') {
-    return closingFees.fba.normal[range];
-  } else if (mode === 'Easy Ship') {
-    return closingFees.easyShip.standard[range];
-  } else if (mode === 'Self Ship') {
-    return closingFees.selfShip[range];
-  }
-
-  return 0;
-};
-
-export const calculatePickAndPackFee = (mode: string, size: string): number => {
-  if (mode !== 'FBA') return 0;
-  return size === 'Standard' ? otherFees.pickAndPack.standard : otherFees.pickAndPack.oversizeHeavyBulky;
-};
-
-export const calculateTotalFees = (data: PricingFormData) => {
-  const referralFee = calculateReferralFee(data.productCategory, data.sellingPrice);
-  const weightHandlingFee = calculateWeightHandlingFee(
-    data.shippingMode,
-    data.weight,
-    data.serviceLevel,
-    data.location,
-    data.productSize
-  );
-  const closingFee = calculateClosingFee(data.shippingMode, data.sellingPrice);
-  const pickAndPackFee = calculatePickAndPackFee(data.shippingMode, data.productSize);
-  
-  const totalFees = referralFee + weightHandlingFee + closingFee + pickAndPackFee;
-  const netEarnings = data.sellingPrice - totalFees;
-  
   return {
-    referralFee,
-    weightHandlingFee,
-    closingFee,
-    pickAndPackFee,
-    totalFees,
-    netEarnings
+    calculateFees: calculateFeesWithState,
+    loading,
+    error,
   };
+};
+
+// Helper function to format currency
+export const formatCurrency = (amount: number): string => {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+  }).format(amount);
 };

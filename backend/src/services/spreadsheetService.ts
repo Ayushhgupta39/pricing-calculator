@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { FeeStructure } from "../models/types";
+import { FeeStructure } from "../types/types";
 import path from "path";
 
 export class SpreadsheetService {

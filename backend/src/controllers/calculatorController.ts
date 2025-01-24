@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { FeeCalculatorService } from '../services/feeCalculatorService';
-import { CalculatorInput } from '../models/types';
+import { CalculatorInput } from '../types/types';
 import { CustomError } from '../utils/errorHandler';
 
 const calculatorService = new FeeCalculatorService();

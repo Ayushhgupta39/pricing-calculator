@@ -1,5 +1,5 @@
 import { FeeCalculatorService } from "../src/services/feeCalculatorService";
-import { CalculatorInput } from "../src/models/types";
+import { CalculatorInput } from "../src/types/types";
 
 describe("FeeCalculatorService", () => {
   let calculatorService: FeeCalculatorService;
