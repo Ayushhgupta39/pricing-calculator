@@ -66,7 +66,6 @@ export const calculateFees = async (
   }
 };
 
-// Optional: Add loading state handling
 export const useFeeCalculator = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
