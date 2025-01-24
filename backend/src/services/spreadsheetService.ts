@@ -21,8 +21,12 @@ export class SpreadsheetService {
     try {
       const sheets = google.sheets({ version: "v4", auth: this.auth });
 
-      // Request data from multiple sheets simultaneously
-      const [referralFeesResponse, closingFeesResponse] = await Promise.all([
+      const [
+        referralFeesResponse,
+        closingFeesResponse,
+        weightFeesResponse,
+        otherFeesResponse,
+      ] = await Promise.all([
         sheets.spreadsheets.values.get({
           spreadsheetId: this.spreadsheetId,
           range: "'Referral fees'",
@@ -41,38 +45,70 @@ export class SpreadsheetService {
         }),
       ]);
 
-      console.log("Referral Fees:", referralFeesResponse.data);
-      console.log("Closing Fees:", closingFeesResponse.data);
-
       const referralRows = referralFeesResponse.data.values || [];
       const closingRows = closingFeesResponse.data.values || [];
+      const weightRows = weightFeesResponse.data.values || [];
+      const otherRows = otherFeesResponse.data.values || [];
 
-      // Combine data from both sheets
-      const combinedFeeStructures = [
-        ...referralRows.map((row) => ({
-          category: row[0],
-          referralFeePercentage: parseFloat(row[1]),
-          closingFeeThreshold: parseFloat(row[2]),
-          baseClosingFee: parseFloat(row[3]),
-          sheetType: "referral",
-        })),
-        ...closingRows.map((row) => ({
-          category: row[0],
-          referralFeePercentage: parseFloat(row[1]),
-          closingFeeThreshold: parseFloat(row[2]),
-          baseClosingFee: parseFloat(row[3]),
-          sheetType: "closing",
-        })),
+      // Combine data from all sheets with explicit type annotations
+      const combinedFeeStructures: FeeStructure[] = [
+        // Referral Fees
+        ...referralRows.slice(1).map(
+          (row): FeeStructure => ({
+            category: row[0],
+            priceRange: row[1],
+            referralFeePercentage: row[2],
+            sheetType: "referral" as const,
+          })
+        ),
+
+        // Closing Fees
+        ...closingRows.slice(1).map(
+          (row): FeeStructure => ({
+            priceRange: row[0],
+            fbaNormal: row[1],
+            fbaException: row[2],
+            easyShip: row[3],
+            selfShip: row[4],
+            sellerFlex: row[5],
+            sheetType: "closing" as const,
+          })
+        ),
+
+        // Weight Handling Fees
+        ...weightRows.slice(1).map(
+          (row): FeeStructure => ({
+            weightRange: row[0],
+            local: row[1],
+            regional: row[2],
+            national: row[3],
+            specialRegions: row[4],
+            sheetType: "weight" as const,
+          })
+        ),
+
+        // Other Fees
+        ...otherRows.slice(1).map(
+          (row): FeeStructure => ({
+            feeType: row[0],
+            applicableOn: row[1],
+            value: row[2],
+            description: row[3],
+            sheetType: "other" as const,
+          })
+        ),
       ];
 
       return combinedFeeStructures;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching fee structures:", error);
+      if (error.response) {
+        console.error("Response error:", error.response.data);
+      }
       throw new Error("Failed to fetch fee structures");
     }
   }
 
-  // Helper method to get all sheet names (useful for debugging)
   async getSheetNames(): Promise<string[]> {
     try {
       const sheets = google.sheets({ version: "v4", auth: this.auth });
@@ -90,12 +126,11 @@ export class SpreadsheetService {
     }
   }
 
-  // Helper method to get data from a specific sheet
   private async getSheetData(sheetName: string) {
     const sheets = google.sheets({ version: "v4", auth: this.auth });
     return sheets.spreadsheets.values.get({
       spreadsheetId: this.spreadsheetId,
-      range: `'${sheetName}'!A2:D`,
+      range: `'${sheetName}'!A1:Z1000`,
     });
   }
 }

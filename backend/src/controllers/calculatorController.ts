@@ -21,6 +21,7 @@ export const calculateProfitability = async (req: Request, res: Response) => {
     const result = await calculatorService.calculateTotalFees(input);
     res.json(result);
   } catch (error) {
+    console.error(error)
     if (error instanceof CustomError) {
       res.status(error.statusCode).json({ error: error.message });
     } else {
